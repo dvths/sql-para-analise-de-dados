@@ -179,7 +179,9 @@ O intervalo entre as classes é arbitrário. Porém, é preciso tomar cuidado, p
 
 /*markdown
 **Passo 1:** Ordenar os dados de forma crescente.
+*/
 
+/*markdown
 **Passo 2:** Determinar o número de classes ($k$), utilizando uma das opções:
 
 -   Expressão de Struges: $k = 1 + 3,3 \cdot \log (n)$
@@ -187,243 +189,72 @@ O intervalo entre as classes é arbitrário. Porém, é preciso tomar cuidado, p
 -   Pela expressão $k = \sqrt{n}$
 
 Em que $n$ é o tamanho da amostra e $k$ deve ser um número inteiro
+*/
 
+/*markdown
 **Passo 3:** Determinar o intervalo entre as classes ($h$), calculado como a amplitude da amostra ($A = valor\ max - valor\ min$) dividido pelo o número de classes: $h = A \div k$
-
-**Passo 4:** Construir a de distribuição de frequências (absoluta, relativa, acumulada e relativa acumulada) para cada classe:
-- O limite inferio da primeira classe corresponde ao valor mínimo da amostra.
-- Para determinar o limite superior de cada classe, devo somar o valor de $h$ ao limite inferior da respectiva classe.
-- O limite inferior da nova classe corresponde ao limite superior da classe anterior.
 
 */
 
 /*markdown
-### Encontrando as fixas de preço dos produtos mais vendidos. 
+**Passo 4:** Construir a de distribuição de frequências (absoluta, relativa, acumulada e relativa acumulada) para cada classe:
+
+- O limite inferior da primeira classe corresponde ao valor mínimo da amostra.
+
+- Para determinar o limite superior de cada classe, devo somar o valor de $h$ ao limite inferior da respectiva classe.
+
+- O limite inferior da nova classe corresponde ao limite superior da classe anterior.
 */
 
--- -- Passo 1: Ordenar os dados de forma crescente
--- WITH ordered_prices AS (
---     SELECT 
---         price AS price
---     FROM tb_order_items
---     ORDER BY price
--- ),
+/*markdown
+### Encontrando as faixas de preço dos produtos mais vendidos. 
+*/
 
--- -- Passo 2: Determinar o número de classes (k)
--- num_classes AS (
---     SELECT
---         COUNT(*) AS n,
---         CEIL(1 + 3.3 * LOG10(COUNT(*))) AS k_sturges,
---         CEIL(SQRT(COUNT(*))) AS k_sqrt
---     FROM ordered_prices
--- ),
-
--- -- Escolha da opção de cálculo de k
--- chosen_k AS (
---     SELECT
---         n,
---         LEAST(k_sturges, k_sqrt) AS k
---     FROM num_classes
--- ),
-
--- -- Passo 3: Determinar o intervalo entre as classes (h)
--- class_interval AS (
---     SELECT
---         MIN(price) AS min_price,
---         MAX(price) AS max_price,
---         (MAX(price) - MIN(price)) AS A,
---         k,
---         ((MAX(price) - MIN(price)) / k) AS h
---     FROM ordered_prices, chosen_k
---     GROUP BY k  -- Agrupar por 'k' para resolver o erro
--- ),
-
--- -- Passo 4: Construir a distribuição de frequências para cada classe
--- frequency_distribution AS (
---   SELECT
---     seq AS classe,
---     MIN_PRICE_PER_CLASS,
---     CASE WHEN seq = (SELECT k FROM chosen_k)::int THEN MAX_PRICE_PER_CLASS 
---          ELSE LEAD(price, 1, MAX_PRICE_PER_CLASS) - 1 
---          END AS upper_limit,
---     COUNT(*) AS f_i,
---     ROUND(CAST(COUNT(*) AS DECIMAL) / (SELECT COUNT(*) FROM ordered_prices) * 100 , 2) AS fr_i,
---     SUM(COUNT(*)) OVER (ORDER BY seq) AS f_ac,
---     ROUND(SUM(COUNT(*)) OVER (ORDER BY seq) / (SELECT COUNT(*) FROM ordered_prices) * 100, 2) AS fr_ac
---   FROM (
---     SELECT 
---       NTILE((SELECT k FROM chosen_k)::int) OVER (ORDER BY price) AS seq,
---       price,
---       MIN(price) OVER (PARTITION BY seq) AS MIN_PRICE_PER_CLASS,
---       MAX(price) OVER (PARTITION BY seq) AS MAX_PRICE_PER_CLASS
---     FROM ordered_prices
---   ) t
--- )
--- -- Consulta final para obter a distribuição de frequências
--- SELECT
---     classe,
---     lower_limit,
---     upper_limit,
---     f_i,
---     fr_i,
---     f_ac,
---     fr_ac
--- FROM frequency_distribution
--- ORDER BY classe;
-
-
--- -- Passo 1: Ordenar os dados de forma crescente
--- WITH ordered_prices AS (
---   SELECT
---     price AS price
---   FROM tb_order_items
---   ORDER BY price
--- ),
-
--- -- Passo 2: Determinar o número de classes (k)
--- num_classes AS (
---   SELECT
---     COUNT(*) AS n,
---     CEIL(1 + 3.3 * LOG10(COUNT(*))) AS k_sturges,
---     CEIL(SQRT(COUNT(*))) AS k_sqrt
---   FROM ordered_prices
--- ),
-
--- -- Escolha da opção de cálculo de k
--- chosen_k AS (
---   SELECT
---     n,
---     LEAST(k_sturges, k_sqrt) AS k
---   FROM num_classes
--- ),
-
--- -- Passo 3: Determinar o intervalo entre as classes (h)
--- class_interval AS (
---   SELECT
---     MIN(price) AS min_price,
---     MAX(price) AS max_price,
---     (MAX(price) - MIN(price)) AS A,
---     k,
---     ((MAX(price) - MIN(price)) / k) AS h
---   FROM ordered_prices, chosen_k
---   GROUP BY k -- Agrupar por 'k' para resolver o erro
--- ),
-
--- -- Passo 4: Construir a distribuição de frequências para cada classe
--- frequency_distribution AS (
---   SELECT
---     DENSE_RANK() OVER (ORDER BY price) - 1 AS classe,  -- Use DENSE_RANK para numerar classes
---     price,
---     MIN(price) OVER (ORDER BY DENSE_RANK() OVER (ORDER BY price)) AS MIN_PRICE_PER_CLASS,
---     MAX(price) OVER (ORDER BY DENSE_RANK() OVER (ORDER BY price)) AS MAX_PRICE_PER_CLASS,
---     COUNT(*) AS f_i,
---     ROUND(CAST(COUNT(*) AS DECIMAL) / (SELECT COUNT(*) FROM ordered_prices) * 100, 2) AS fr_i,
---     SUM(COUNT(*)) OVER (ORDER BY classe) AS f_ac,
---     ROUND(SUM(COUNT(*)) OVER (ORDER BY classe) / (SELECT COUNT(*) FROM ordered_prices) * 100, 2) AS fr_ac
---   FROM ordered_prices
--- )
-
--- -- Consulta final para obter a distribuição de frequências
--- SELECT
---   classe,
---   lower_limit,
---   upper_limit,
---   f_i,
---   fr_i,
---   f_ac,
---   fr_ac
--- FROM frequency_distribution
--- ORDER BY classe;
-
-
--- WITH dados_ordenados AS (
---   -- Passo 1: Ordenar dados
---   SELECT price 
---   FROM tb_order_items
---   ORDER BY price ASC
--- ),
--- numero_classes AS (
---   -- Passo 2: Calcular número de classes (k)
---   SELECT
---     COUNT(*) AS total_produtos,
---     1 + 3.3 * LOG(COUNT(*)) AS classes_sugeridas
---   FROM dados_ordenados
--- ),
--- cte_intervalo_classe AS (
---   -- Passo 3: Determinar intervalo entre classes (h)
---   SELECT
---     MIN(price) AS preco_minimo,
---     MAX(price) AS preco_maximo,
---     (MAX(price) - MIN(price)) / (1 + 3.3 * LOG(COUNT(*))) AS intervalo_classe
---   FROM dados_ordenados, numero_classes
--- ),
-
--- cte_classes AS (
---   -- Passo 4: Calcular limites e frequências por classe
---   SELECT
---     FLOOR(price / intervalo_classe) * intervalo_classe AS limite_inferior,
---     FLOOR(price / intervalo_classe) * intervalo_classe + intervalo_classe AS limite_superior,
---     COUNT(*) AS frequencia_absoluta
---   FROM dados_ordenados
---   GROUP BY FLOOR(price / intervalo_classe) * intervalo_classe
---   ORDER BY FLOOR(price / intervalo_classe) * intervalo_classe
--- )
--- select * from cte_classes  
-
-WITH cte_dados_ordenados AS (
-  -- Passo 1: Ordenar dados
-  SELECT price
-  FROM tb_order_items 
-  ORDER BY price ASC
+-- Passo 1: Ordenar os dados de forma crescente
+with ordered_prices as (
+    select 
+        price
+    from tb_order_items
+    order by price
 ),
-cte_numero_classes AS (
-  -- Passo 2: Calcular número de classes (k)
-  SELECT
-    COUNT(*) AS total_produtos,
-    1 + 3.3 * LOG(COUNT(*)) AS classes_sugeridas
-  FROM cte_dados_ordenados
+
+-- Passo 2: Determinar o número de classes (utilizando a expressão de Sturges: k = 1 + 3.3 · log2(n))
+classes as (
+    select
+        count(*) as products_total,
+        floor(1 + 3.3 * log10(count(*))) as k
+    from ordered_prices
 ),
-cte_intervalo_classe AS (
-  -- Passo 3: Determinar intervalo entre classes (h)
-  SELECT
-    MIN(price) AS preco_minimo,
-    MAX(price) AS preco_maximo,
-    (MAX(price) - MIN(price)) / (1 + 3.3 * LOG(COUNT(*))) AS intervalo_classe
-  FROM cte_dados_ordenados,
-  cte_numero_classes
-),
--- cte_classes AS (
---   -- Passo 4: Calcular limites e frequências por classe
---   SELECT
---     FLOOR(price / intervalo_classe) * intervalo_classe AS limite_inferior,
---     FLOOR(price / intervalo_classe) * intervalo_classe + intervalo_classe AS limite_superior,
---     COUNT(*) AS frequencia_absoluta
---   FROM cte_dados_ordenados
---   GROUP BY 1
--- ),
-cte_frequencia_relativa AS (
-  -- Calcular frequência relativa
-  SELECT
-    limite_inferior,
-    limite_superior,
-    frequencia_absoluta,
-    frequencia_absoluta / total_produtos AS frequencia_relativa
-  FROM cte_classes,
-  (
-    SELECT COUNT(*) AS total_produtos
-    FROM tb_order_items
-  ) AS total_produtos
-),
-cte_frequencia_acumulada AS (
-  -- Calcular frequências acumuladas
-  SELECT
-    limite_inferior,
-    limite_superior,
-    frequencia_absoluta,
-    frequencia_relativa,
-    SUM(frequencia_absoluta) OVER (ORDER BY limite_inferior) AS frequencia_absoluta_acumulada
-    -- SUM(frequencia_relativa) OVER (ORDER BY limite_inferior) AS frequencia_relativa_acumulada
-  FROM cte_frequencia_relativa
+
+-- Passo 3: Determinar o intervalo entre as classes (h), calculado como a amplitude da amostra (A = max(value) - min(value)) dividido pelo número de classes (k) -> h = A/k
+interval as (
+    select 
+        max(price) as max_price,
+        min(price) as min_price,
+        (max(price) - min(price)) / (1 + 3.3 * log10(count(*))) as interval_size
+    from ordered_prices, classes
 )
 
-select * from cte_frequencia_acumulada
+-- Passo 4: Calcular a distribuição de frequência
+select
+    floor(lower_class) as min_value,
+    floor(upper_class) as max_value,
+    count(price) as f_i,
+    sum(count(price)) over (order by lower_class) as f_ac,
+    round(count(price) / sum(count(price)) over () * 100, 2) as f_ri,
+    round(sum(count(price)) over (order by lower_class) / sum(count(price)) over () * 100, 2) as f_rac 
+from (
+    select
+        price,
+        ceil((price - interval.min_price) / interval.interval_size) as seq,
+        interval.min_price + (interval.interval_size * (ceil((price - interval.min_price) / interval.interval_size) - 1)) as lower_class,
+        interval.min_price + (interval.interval_size * ceil((price - interval.min_price) / interval.interval_size)) as upper_class
+    from
+        ordered_prices
+    cross join
+        interval
+) as price_bins
+group by
+    lower_class, upper_class 
+order by
+    lower_class;
