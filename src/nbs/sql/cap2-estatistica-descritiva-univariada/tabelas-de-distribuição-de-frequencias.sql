@@ -183,26 +183,37 @@ O intervalo entre as classes é arbitrário. Porém, é preciso tomar cuidado, p
 
 /*markdown
 **Passo 2:** Determinar o número de classes ($k$), utilizando uma das opções:
+*/
 
+/*markdown
 -   Expressão de Struges: $k = 1 + 3,3 \cdot \log (n)$
+*/
 
+/*markdown
 -   Pela expressão $k = \sqrt{n}$
+*/
 
+/*markdown
 Em que $n$ é o tamanho da amostra e $k$ deve ser um número inteiro
 */
 
 /*markdown
 **Passo 3:** Determinar o intervalo entre as classes ($h$), calculado como a amplitude da amostra ($A = valor\ max - valor\ min$) dividido pelo o número de classes: $h = A \div k$
-
 */
 
 /*markdown
 **Passo 4:** Construir a de distribuição de frequências (absoluta, relativa, acumulada e relativa acumulada) para cada classe:
+*/
 
+/*markdown
 - O limite inferior da primeira classe corresponde ao valor mínimo da amostra.
+*/
 
+/*markdown
 - Para determinar o limite superior de cada classe, devo somar o valor de $h$ ao limite inferior da respectiva classe.
+*/
 
+/*markdown
 - O limite inferior da nova classe corresponde ao limite superior da classe anterior.
 */
 
@@ -217,7 +228,6 @@ with ordered_prices as (
     from tb_order_items
     order by price
 ),
-
 -- Passo 2: Determinar o número de classes (utilizando a expressão de Sturges: k = 1 + 3.3 · log2(n))
 classes as (
     select
@@ -225,7 +235,6 @@ classes as (
         floor(1 + 3.3 * log10(count(*))) as k
     from ordered_prices
 ),
-
 -- Passo 3: Determinar o intervalo entre as classes (h), calculado como a amplitude da amostra (A = max(value) - min(value)) dividido pelo número de classes (k) -> h = A/k
 interval as (
     select 
@@ -234,7 +243,6 @@ interval as (
         (max(price) - min(price)) / (1 + 3.3 * log10(count(*))) as interval_size
     from ordered_prices, classes
 )
-
 -- Passo 4: Calcular a distribuição de frequência
 select
     floor(lower_class) as min_value,
@@ -258,3 +266,136 @@ group by
     lower_class, upper_class 
 order by
     lower_class;
+
+/*markdown
+A criação de classes e faixas referem-se aos intervalos resultate da discretização (ou binning). Cada classe ($k$) representa um intervalo de valores. As classes devem ser mutualmente exclusivas e coletivamente exaustivas, o que significa que cada valor de dados deve se encaixar em exatamente uma classe e todas as classes devem cobrir todo o intervalo dos dados. 
+*/
+
+/*markdown
+## Discretização (Binning)
+*/
+
+/*markdown
+Os grupos gerados por $h = A \div k$ são chamados de _bins_ (ou compartimentos) esses intervalos podem ter taminho fixo ou variável. Bins de tamanho variável podem ser úteis mas bins de tamaho fixo são mais apropriados para a análise. Bins de tamanho fixo podem ser obtidos de algumas maneiras além da utilizada no exemplo anterior. Esas maneiras incluem arredondamentos, logaritmos e funções `ntile`.
+*/
+
+/*markdown
+### Funções de Janela
+*/
+
+/*markdown
+As funções podem ser úteis para a criação de tabelas de frequências. Um problema comum com o qual invariávelmente nos deparamos: calcular um novo campo com um novo dado para cada linha. Isso exclui inerentemente as operações de agregação, pois estas agrupam um conjunto de linhas para uma única linha de saida.  
+*/
+
+/*markdown
+Imagine que temos alguns blocos de contrução que representam alguns dados. Podemos necessitar observar alguns desses blocos ou criar novos blocos dependendo dos blocos existentes. Podemos querer:
+*/
+
+/*markdown
+- Comparar blocos sem misturá-los
+- Contar ou somar blocos seguidos
+- Encontrar o maior bloco ou o menor bloco
+- Dar uma pontuação ou classificação aos blocos
+- Observar como um determinado bloco se compara aos seus vizinhos
+*/
+
+/*markdown
+Essas funções também podem receber um argumento que especifica o número de bins dentro dos quais os dados serão divididos, e opcionalmente, usam uma cláusula PARTITION BY e/ou ORDER BY. A sintaxe completa de uma função de janela é a seguinte:
+*/
+
+/*markdown
+```
+analytc_function(num_bins) over (partition by ... order by ...)
+
+```
+*/
+
+/*markdown
+As funções de janela também são chamadas de funções analíticas e incluem as funções de agregação comuns (`count`, `sum`, `avg`, `min`, `max`) e as funções analíticas `rank`, `first_value`, `ntile` entre outras ([Documentação](https://www.postgresql.org/docs/current/tutorial-window.html)). Toda função de janela conta com a cláusula `over` que é usada para determinar as linhas incluídas na operação e a ordem dessas linhas.
+*/
+
+/*markdown
+Na query abaixo, eu faço o faturamento de um vendedor: a frequência de um item do pedido e a soma da receita gerada por ele, para cada pedido feito por um cliente, ordenado por vendedor. Para validar, defino a condição de que só serão contados os pedidos classificados como "delivered" (entregue).
+*/
+
+select 
+    seller_id
+    , product_id 
+    , count(*) as qtde_produto 
+    , round(cast(sum(price) as numeric), 2) as receita_produto
+from tb_orders as x
+left join tb_order_items as y
+    on x.order_id = y.order_id
+where order_status = 'delivered'
+group by 1, 2
+order by seller_id
+
+/*markdown
+Na proxima query pretendo respoder qual é o item mais vendido de cada vendedor: 
+*/
+
+with tb_seller_product as (
+    select 
+        seller_id,
+        product_id,
+        count(*) as items_sold,
+        round(cast(sum(price) as numeric), 2) as sales_revenue 
+    from tb_orders as x
+    left join tb_order_items as y
+        on x.order_id = y.order_id
+    where order_status = 'delivered'
+    group by 1, 2 
+),
+tb_window_sort as (
+    select 
+        seller_id
+        , product_id
+        , items_sold
+        , sales_revenue
+        , row_number() over (
+            partition by seller_id 
+            order by items_sold desc, sales_revenue desc
+        ) as best_salling_item_classification
+    from tb_seller_product
+)
+select 
+    seller_id
+    , product_id
+    , items_sold
+    , sales_revenue
+from tb_window_sort
+where best_salling_item_classification = 1
+
+/*markdown
+A query calcula a frequencia absoluta do item mais vendido para cada vendedor e o total da receita gerada por ele. O resultado da query anterior é utilizado em outra CTE, `tb_window_sort`, que, para cada linha  referente a um item vendido, adiciona um numero segundo a ordem decrescente de quantidade de itens e receita. Ou seja, para o item mais vendido é atribuido o número 1, para o segundo maior, o 2... sequencialmente, da primeira ocorrência de um vendedor até a última. Esse intervalo, entre a primeira e a última ocorrência de um vendedor, é a janela ou partição (_bin_) de dados onde acontecerá a operação. Ao final, consigo selecionar apenas as linhas de produtos  que foram rotuladas com o número 1 com segurança de que estou filtrando o maior valor.
+*/
+
+/*markdown
+Para ver o resultado da classificação feita pela função de janela:
+*/
+
+with tb_seller_product as (
+    select 
+        seller_id,
+        product_id,
+        count(*) as items_sold,
+        round(cast(sum(price) as numeric), 2) as sales_revenue 
+    from tb_orders as x
+    left join tb_order_items as y
+        on x.order_id = y.order_id
+    where order_status = 'delivered'
+    group by 1, 2 
+),
+tb_window_sort as (
+    select 
+        seller_id
+        , product_id
+        , items_sold
+        , sales_revenue
+        , row_number() over (
+            partition by seller_id 
+            order by items_sold desc, sales_revenue desc
+        ) as best_salling_item_classification
+    from tb_seller_product
+)
+select * from tb_window_sort
